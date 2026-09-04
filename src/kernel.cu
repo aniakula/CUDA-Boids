@@ -377,8 +377,8 @@ __global__ void kernUpdateVelNeighborSearchCoherent(
 void Boids::stepSimulationNaive(float dt) {
   // TODO-1.2 - use the kernels you wrote to step the simulation forward in time.
   // TODO-1.2 ping-pong the velocity buffers
-    kernUpdateVelocityBruteForce << <divup(numObjects, blockSize) >> > (numObjects, dev_pos, dev_vel1, dev_vel2);
-	kernUpdatePos <<<divup(numObjects, blockSize)>>> (numObjects, dt, dev_pos, dev_vel1);
+    kernUpdateVelocityBruteForce << <(numObjects + blockSize - 1)/blockSize >> > (numObjects, dev_pos, dev_vel1, dev_vel2);
+	kernUpdatePos <<<(numObjects + blockSize - 1)/blockSize>>> (numObjects, dt, dev_pos, dev_vel1);
 	std::swap(dev_vel1, dev_vel2);
 }
 
