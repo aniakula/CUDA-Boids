@@ -266,8 +266,13 @@ __global__ void kernUpdateVelocityBruteForce(int N, glm::vec3 *pos,
 	int index = threadIdx.x + (blockIdx.x * blockDim.x);
     if(index >= N){return;}
 
-	vel2[index] = clamp(vel1[index] + computeVelocityChange(N, index, pos, vel1), 0.f, 1.f);
-
+	glm::vec3 speedVec = vel1[index] + computeVelocityChange(N, index, pos, vel1);
+    //don't need to mult by maxSpeed but for style sake kept it
+    if(glm::length(speedVec) > maxSpeed) {
+       speedVec = glm::normalize(speedVec) * maxSpeed;
+    }
+    
+    vel2[index] = speedVec;
 }
 
 /**
@@ -372,6 +377,9 @@ __global__ void kernUpdateVelNeighborSearchCoherent(
 void Boids::stepSimulationNaive(float dt) {
   // TODO-1.2 - use the kernels you wrote to step the simulation forward in time.
   // TODO-1.2 ping-pong the velocity buffers
+    kernUpdateVelocityBruteForce << <divup(numObjects, blockSize) >> > (numObjects, dev_pos, dev_vel1, dev_vel2);
+	kernUpdatePos <<<divup(numObjects, blockSize)>>> (numObjects, dt, dev_pos, dev_vel1);
+	std::swap(dev_vel1, dev_vel2);
 }
 
 void Boids::stepSimulationScatteredGrid(float dt) {
