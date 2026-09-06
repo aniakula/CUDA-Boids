@@ -240,6 +240,45 @@ void Boids::copyBoidsToVBO(float *vbodptr_positions, float *vbodptr_velocities) 
 * stepSimulation *
 ******************/
 
+
+__device__ glm::vec3 rule1(int N, int iSelf, const glm::vec3* pos) {
+	glm::vec3 perceived_center(0.0f);
+	int currIdx = threadIdx.x + (blockIdx.x * blockDim.x);
+	if (currIdx >= N) { return perceived_center; }
+    for(int i = 0; i < N; i++) {
+        if (i != iSelf && glm::distance(pos[i], pos[iSelf]) < rule1Distance) {
+            perceived_center += pos[i];
+        }
+	}
+
+    //excluding self:
+	perceived_center /= (N - 1);
+	return (perceived_center - pos[iSelf]) * rule1Scale;
+}
+
+__device__ glm::vec3 rule2(int N, int iSelf, const glm::vec3* pos) {
+	glm::vec3 seperation_force (0.0f);
+    for (int i = 0; i < N; i++) {
+        if (i != iSelf && glm::distance(pos[i], pos[iSelf]) < rule2Distance) {
+            seperation_force -= (pos[i] - pos[iSelf]);
+        }
+    }
+
+	return seperation_force * rule2Scale;
+}
+
+__device__ glm::vec3 rule3(int N, int iSelf, const glm::vec3* pos, const glm::vec3* vel) {
+	glm::vec3 perceived_velocity(0.0f);
+    for(int i = 0; i < N; i++) {
+        if (i != iSelf && glm::distance(pos[i], pos[iSelf]) < rule3Distance) {
+            perceived_velocity += vel[i];
+        }
+	}
+	//excluding self:
+	perceived_velocity /= (N - 1);
+	return perceived_velocity * rule3Scale;
+}
+
 /**
 * LOOK-1.2 You can use this as a helper for kernUpdateVelocityBruteForce.
 * __device__ code can be called from a __global__ context
@@ -250,8 +289,11 @@ __device__ glm::vec3 computeVelocityChange(int N, int iSelf, const glm::vec3 *po
   // Rule 1: boids fly towards their local perceived center of mass, which excludes themselves
   // Rule 2: boids try to stay a distance d away from each other
   // Rule 3: boids try to match the speed of surrounding boids
+	glm::vec3 v1 = rule1(N, iSelf, pos);
+	glm::vec3 v2 = rule2(N, iSelf, pos);
+	glm::vec3 v3 = rule3(N, iSelf, pos, vel);
 
-  return glm::vec3(0.0f, 0.0f, 0.0f);
+  return vel[iSelf] + v1 + v2 + v3;
 }
 
 /**
