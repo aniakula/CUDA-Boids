@@ -13,7 +13,6 @@
 #include <thrust/execution_policy.h>
 #include <thrust/random.h>
 #include <thrust/device_vector.h>
-
 #include <glm/glm.hpp>
 
 // LOOK-2.1 potentially useful for doing grid-based neighbor search
@@ -252,7 +251,9 @@ __device__ glm::vec3 rule1(int N, int iSelf, const glm::vec3* pos) {
 			num_neighbors++;
         }
 	}
-
+    if (num_neighbors == 0) {
+        return glm::vec3(0.0f);
+    }
 	perceived_center /= num_neighbors;
 	return (perceived_center - pos[iSelf]) * rule1Scale;
 }
@@ -277,7 +278,9 @@ __device__ glm::vec3 rule3(int N, int iSelf, const glm::vec3* pos, const glm::ve
 			num_neighbors++;
         }
 	}
-	//excluding self:
+    if (num_neighbors == 0) {
+        return glm::vec3(0.0f);
+    }
 	perceived_velocity /= num_neighbors;
 	return perceived_velocity * rule3Scale;
 }
