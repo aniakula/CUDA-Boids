@@ -62,7 +62,7 @@ void checkCUDAError(const char *msg, int line = -1) {
 #define maxSpeed 1.0f
 
 /*! Size of the starting area in simulation space. */
-#define scene_scale 100.0f
+#define scene_scale 25.0f
 
 /***********************************************
 * Kernel state (pointers are device pointers) *
@@ -243,16 +243,17 @@ void Boids::copyBoidsToVBO(float *vbodptr_positions, float *vbodptr_velocities) 
 
 __device__ glm::vec3 rule1(int N, int iSelf, const glm::vec3* pos) {
 	glm::vec3 perceived_center(0.0f);
+	int num_neighbors = 0;
 	int currIdx = threadIdx.x + (blockIdx.x * blockDim.x);
 	if (currIdx >= N) { return perceived_center; }
     for(int i = 0; i < N; i++) {
         if (i != iSelf && glm::distance(pos[i], pos[iSelf]) < rule1Distance) {
             perceived_center += pos[i];
+			num_neighbors++;
         }
 	}
 
-    //excluding self:
-	perceived_center /= (N - 1);
+	perceived_center /= num_neighbors;
 	return (perceived_center - pos[iSelf]) * rule1Scale;
 }
 
@@ -269,13 +270,15 @@ __device__ glm::vec3 rule2(int N, int iSelf, const glm::vec3* pos) {
 
 __device__ glm::vec3 rule3(int N, int iSelf, const glm::vec3* pos, const glm::vec3* vel) {
 	glm::vec3 perceived_velocity(0.0f);
+    int num_neighbors = 0;
     for(int i = 0; i < N; i++) {
         if (i != iSelf && glm::distance(pos[i], pos[iSelf]) < rule3Distance) {
             perceived_velocity += vel[i];
+			num_neighbors++;
         }
 	}
 	//excluding self:
-	perceived_velocity /= (N - 1);
+	perceived_velocity /= num_neighbors;
 	return perceived_velocity * rule3Scale;
 }
 
@@ -308,7 +311,7 @@ __global__ void kernUpdateVelocityBruteForce(int N, glm::vec3 *pos,
 	int index = threadIdx.x + (blockIdx.x * blockDim.x);
     if(index >= N){return;}
 
-	glm::vec3 speedVec = vel1[index] + computeVelocityChange(N, index, pos, vel1);
+	glm::vec3 speedVec = computeVelocityChange(N, index, pos, vel1);
     //don't need to mult by maxSpeed but for style sake kept it
     if(glm::length(speedVec) > maxSpeed) {
        speedVec = glm::normalize(speedVec) * maxSpeed;
@@ -420,8 +423,11 @@ void Boids::stepSimulationNaive(float dt) {
   // TODO-1.2 - use the kernels you wrote to step the simulation forward in time.
   // TODO-1.2 ping-pong the velocity buffers
     kernUpdateVelocityBruteForce << <(numObjects + blockSize - 1)/blockSize >> > (numObjects, dev_pos, dev_vel1, dev_vel2);
+
+    std::swap(dev_vel1, dev_vel2);
+
 	kernUpdatePos <<<(numObjects + blockSize - 1)/blockSize>>> (numObjects, dt, dev_pos, dev_vel1);
-	std::swap(dev_vel1, dev_vel2);
+	
 }
 
 void Boids::stepSimulationScatteredGrid(float dt) {
