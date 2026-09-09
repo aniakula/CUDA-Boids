@@ -16,6 +16,8 @@
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
 #include <glm/gtc/matrix_transform.hpp>
+#include <chrono>
+#include <vector>
 
 // ================
 // Configuration
@@ -30,6 +32,24 @@
 const int N_FOR_VIS = 5000;
 const float DT = 0.2f;
 
+const bool BENCHMARK = true;
+const std::vector<int> BENCHMARK_BOID_COUNTS = {
+    500,
+    1000,
+    2000,
+    4000,
+    8000,
+    16000,
+    32000,
+	64000,
+    128000
+};
+
+const int BENCHMARK_WARMUP_FRAMES = 100;
+const int BENCHMARK_FRAMES = 500;
+
+void benchmark();
+
 /**
 * C main function.
 */
@@ -37,6 +57,12 @@ int main(int argc, char* argv[]) {
   projectName = "5650 CUDA Intro: Boids";
 
   if (init(argc, argv)) {
+
+      if (BENCHMARK) {
+          benchmark();
+          return 0;
+      }
+
     mainLoop();
     Boids::endSimulation();
     return 0;
@@ -219,6 +245,59 @@ void initShaders(GLuint * program) {
     // unmap buffer object
     cudaGLUnmapBufferObject(boidVBO_positions);
     cudaGLUnmapBufferObject(boidVBO_velocities);
+  }
+
+  void benchmark() {
+      std::cout << "\n========== Boids Performance Benchmark ==========\n";
+      std::cout << "Frames per test: " << BENCHMARK_FRAMES << "\n\n";
+      std::cout << "Boids\tAverage FPS\n";
+      std::cout << "--------------------------------\n";
+
+      for (int N : BENCHMARK_BOID_COUNTS) {
+
+          Boids::initSimulation(N);
+
+          //warm up:
+          for (int i = 0; i < BENCHMARK_WARMUP_FRAMES; i++) {
+          #if UNIFORM_GRID && COHERENT_GRID
+              Boids::stepSimulationCoherentGrid(DT);
+          #elif UNIFORM_GRID
+              Boids::stepSimulationScatteredGrid(DT);
+          #else
+              Boids::stepSimulationNaive(DT);
+          #endif
+          }
+
+		  //sync before timing
+          cudaDeviceSynchronize();
+
+          auto start = std::chrono::high_resolution_clock::now();
+
+          for (int i = 0; i < BENCHMARK_FRAMES; i++) {
+          #if UNIFORM_GRID && COHERENT_GRID
+              Boids::stepSimulationCoherentGrid(DT);
+          #elif UNIFORM_GRID
+              Boids::stepSimulationScatteredGrid(DT);
+          #else
+              Boids::stepSimulationNaive(DT);
+          #endif
+          }
+
+          cudaDeviceSynchronize();
+
+          auto end = std::chrono::high_resolution_clock::now();
+
+          double elapsedSeconds =
+              std::chrono::duration<double>(end - start).count();
+
+          double fps = BENCHMARK_FRAMES / elapsedSeconds;
+
+          std::cout << N << "\t" << fps << "\n";
+
+          Boids::endSimulation();
+      }
+
+      std::cout << "=================================================\n";
   }
 
   void mainLoop() {
